@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>小招喵｜大学生理财陪伴搭子</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app">
+
+    <!-- 顶部状态区 -->
+    <header class="header-bar">
+      <div class="header-left">
+        <img src="./assets/stages/stage-1.png" alt="小招喵" class="header-avatar" id="headerAvatar" />
+        <div class="header-info">
+          <span class="header-name">小招喵</span>
+          <span class="header-level" id="headerLevel">Lv.1</span>
+        </div>
+      </div>
+      <div class="header-power">
+        <span class="power-num" id="meowPowerVal">135</span>
+        <span class="power-label">喵力值</span>
+      </div>
+    </header>
+
+    <!-- 数据面板 -->
+    <section class="data-strip">
+      <div class="strip-item">
+        <span class="strip-val red" id="todaySpent">0</span>
+        <span class="strip-label">今日已花</span>
+      </div>
+      <div class="strip-sep"></div>
+      <div class="strip-item">
+        <span class="strip-val" id="weeklyLeft">300</span>
+        <span class="strip-label">本周可花</span>
+      </div>
+      <div class="strip-sep"></div>
+      <div class="strip-item">
+        <span class="strip-val gold" id="goalName">暂无目标</span>
+        <span class="strip-label" id="goalProgress">设置一个试试</span>
+      </div>
+    </section>
+
+    <!-- 对话区 -->
+    <main class="chat-main">
+      <section class="chat-area" id="chatArea">
+        <div class="bubble bubble-left">
+          <span class="bubble-text">今天想聊点什么喵？记账、攒钱、理财问题都可以告诉我喵。</span>
+        </div>
+      </section>
+      <img src="./assets/stages/stage-1.png" alt="小招喵" class="mascot-companion" id="mascotImg" />
+    </main>
+
+    <!-- 底部区域 -->
+    <footer class="footer-zone">
+      <!-- 功能提示快捷入口 -->
+      <div class="quick-chips" id="quickChips">
+        <button class="chip" data-prompt="快速记账">快速记账</button>
+        <button class="chip" data-prompt="储蓄计划">储蓄计划</button>
+        <button class="chip" data-prompt="理财科普">理财科普</button>
+        <button class="chip" data-prompt="风险咨询">风险咨询</button>
+      </div>
+      <!-- 输入栏 -->
+      <div class="input-row">
+        <input type="text" class="chat-input" id="chatInput" placeholder="和小招喵聊聊..." />
+        <button class="send-btn" id="sendBtn" aria-label="发送">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+        </button>
+      </div>
+      <p class="ai-note">内容由小招喵生成，仅作学习与记账辅助</p>
+    </footer>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>

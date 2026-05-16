@@ -1,0 +1,9 @@
+{
+  "name": "xiaozhaomiao-demo",
+  "version": "1.0.0",
+  "description": "小招喵 H5 Demo (Vercel + Coze OAuth JWT)",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  }
+}
