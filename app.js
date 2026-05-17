@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ============ DOM ============
   const mascotImg = document.getElementById('mascotImg');
+  const mascotStage = document.getElementById('mascotStage');
   const headerAvatar = document.getElementById('headerAvatar');
   const headerLevel = document.getElementById('headerLevel');
   const meowPowerVal = document.getElementById('meowPowerVal');
@@ -103,14 +104,14 @@ document.addEventListener('DOMContentLoaded', () => {
       mascotImg.style.transform = 'translateY(6px) scale(0.94)';
       setTimeout(() => {
         mascotImg.src = `./assets/stages/${img}`;
-        headerAvatar.src = `./assets/stages/${img}`;
+        // 顶部头像固定使用用户提供的新头像，不随成长阶段切换
         headerLevel.textContent = level;
         mascotImg.style.opacity = '1';
         mascotImg.style.transform = 'translateY(0) scale(1)';
+        triggerMascotMood('proud', 1200);
       }, 240);
     } else {
       mascotImg.src = `./assets/stages/${img}`;
-      headerAvatar.src = `./assets/stages/${img}`;
       headerLevel.textContent = level;
     }
   }
@@ -331,10 +332,15 @@ document.addEventListener('DOMContentLoaded', () => {
   // 判断意图（基于用户输入和回复）
   function inferIntent(userInput, replyText) {
     const text = (userInput || '') + ' ' + (replyText || '');
-    if (/(返佣|刷单|高收益|保本|稳赚|校园贷|培训费|先交钱|验证码|身份证|银行卡)/.test(text)) return 'risk';
-    if (/(攒|存|目标|基金|想买)/.test(text)) return 'saving';
-    if (/(基金|定投|理财|风险等级|年化|货币|复利)/.test(text)) return 'finance';
-    if (parseUserExpense(userInput)) return 'expense';
+    // 风险类关键词优先级最高
+    if (/(返佣|刷单|高收益|保本|稳赚|校园贷|培训费|先交钱|验证码|身份证|银行卡出租|杀猪盘|荐股)/.test(text)) return 'risk';
+    // 攒钱目标信号（"想买/想看/想要 + 金额"或明确说"攒钱/存钱/目标"）
+    if (/(想看|想买|想要|想去|目标|攒|存钱|存到|存够|存够|生活费.*\d|每月.*\d)/.test(userInput || '')) return 'saving';
+    // 理财科普关键词
+    if (/(基金|定投|理财|风险等级|年化|货币基金|复利|指数基金|股票|债券)/.test(text)) return 'finance';
+    // 明确的记账信号：必须包含"花/吃/买/付 + 金额 + (元/块/钱)" 或者就是"X 元 + 商品名"的简短记账格式
+    if (/(花|吃|买|付|喝|打车|地铁|外卖|早饭|午饭|晚饭|奶茶|咖啡)[^。，,.]{0,8}\d+(\.\d+)?\s*(元|块|¥|￥)?/.test(userInput || '')) return 'expense';
+    if (/^\s*(午饭|晚饭|早饭|奶茶|咖啡|外卖|打车|地铁|快递|零食|水果)\s*\d+(\.\d+)?\s*(元|块|¥|￥)?\s*$/.test(userInput || '')) return 'expense';
     return 'general';
   }
 
@@ -352,10 +358,90 @@ document.addEventListener('DOMContentLoaded', () => {
     b.className = `bubble bubble-${side}`;
     b.innerHTML = `<span class="bubble-text">${escapeHtml(text)}</span>`;
     chatArea.appendChild(b);
+    if (side === 'left') {
+      attachFeedback(b, text);
+      triggerMascotMood(pickMascotMood(text), 1600);
+    }
     scrollToBottom();
   }
 
+  // 吉祥物生命感：根据回复内容切换表情/动作
+  function pickMascotMood(text) {
+    if (/(记好|成功|完成|加油|真好|升级|满阶|好嘞)/.test(text || '')) return 'proud';
+    if (/(想|思考|等等|试试|看看|可以|了解)/.test(text || '')) return 'thinking';
+    return 'speaking';
+  }
+
+  function triggerMascotMood(mood, duration = 1400) {
+    if (!mascotStage) return;
+    mascotStage.classList.remove('is-speaking', 'is-thinking', 'is-proud');
+    mascotStage.classList.add(`is-${mood}`);
+    clearTimeout(triggerMascotMood.timer);
+    triggerMascotMood.timer = setTimeout(() => {
+      mascotStage.classList.remove('is-speaking', 'is-thinking', 'is-proud');
+    }, duration);
+  }
+
+  function mascotTap() {
+    if (!mascotStage) return;
+    mascotStage.classList.remove('is-clicking');
+    // 强制重播动画
+    void mascotStage.offsetWidth;
+    mascotStage.classList.add('is-clicking');
+    triggerMascotMood('proud', 1000);
+    setTimeout(() => mascotStage.classList.remove('is-clicking'), 780);
+  }
+
+  // 反馈按钮（仅在小招喵气泡下方出现）
+  function attachFeedback(bubbleEl, replyText) {
+    const fb = document.createElement('div');
+    fb.className = 'feedback-row';
+    fb.innerHTML = `
+      <button class="fb-btn fb-up" data-vote="up" aria-label="赞">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1h3z"/><path d="M7 11l4-7c.4-.7 1.1-1 1.8-.8.9.2 1.4 1 1.4 2v4h4.5c1.2 0 2.1 1 1.9 2.2l-1.2 7.4a2 2 0 0 1-2 1.7H7"/></svg>
+      </button>
+      <button class="fb-btn fb-down" data-vote="down" aria-label="踩">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M17 13V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-3z"/><path d="M17 13l-4 7c-.4.7-1.1 1-1.8.8-.9-.2-1.4-1-1.4-2v-4H5.3c-1.2 0-2.1-1-1.9-2.2l1.2-7.4a2 2 0 0 1 2-1.7H17"/></svg>
+      </button>
+    `;
+    bubbleEl.appendChild(fb);
+
+    fb.addEventListener('click', (e) => {
+      const btn = e.target.closest('.fb-btn');
+      if (!btn) return;
+      const vote = btn.dataset.vote;
+      // 互斥：点同一个 = 取消，点另一个 = 切换
+      const already = btn.classList.contains('fb-active');
+      fb.querySelectorAll('.fb-btn').forEach(b => b.classList.remove('fb-active'));
+      if (!already) {
+        btn.classList.add('fb-active');
+        recordFeedback(vote, replyText);
+      } else {
+        recordFeedback('cancel', replyText);
+      }
+    });
+  }
+
+  // 反馈日志（本地 localStorage）
+  function recordFeedback(vote, replyText) {
+    try {
+      const KEY = 'xiaozhaomiao_feedback';
+      const log = JSON.parse(localStorage.getItem(KEY) || '[]');
+      log.push({
+        vote: vote,
+        reply: replyText.slice(0, 200),
+        ts: Date.now()
+      });
+      // 最多保留 500 条，避免无限增长
+      if (log.length > 500) log.splice(0, log.length - 500);
+      localStorage.setItem(KEY, JSON.stringify(log));
+    } catch (e) {
+      // 静默
+    }
+  }
+
   function addLoadingBubble() {
+    triggerMascotMood('thinking', 2400);
     const b = document.createElement('div');
     b.className = 'bubble bubble-left bubble-loading';
     b.id = 'loadingBubble';
@@ -461,17 +547,37 @@ document.addEventListener('DOMContentLoaded', () => {
   // 浏览器 F12 可见，仅用于挡住非浏览器场景的脚本刷量；真正安全靠后端 Origin 校验与限流。
   const DEMO_TOKEN = 'xzm-demo-2026';
 
+  // 会话 ID（放 sessionStorage，关闭标签页即重置；要持久化跨标签可改 localStorage）
+  // 用 sessionStorage 的好处：用户重开页面 = 新对话，避免上下文越积越长拖慢响应
+  const CONV_KEY = 'xiaozhaomiao_conv_id';
+  function getConversationId() {
+    try { return sessionStorage.getItem(CONV_KEY) || null; } catch (e) { return null; }
+  }
+  function setConversationId(id) {
+    try { if (id) sessionStorage.setItem(CONV_KEY, id); } catch (e) {}
+  }
+
   async function callAPI(userMessage) {
+    const conv = getConversationId();
     const resp = await fetch('/api/chat', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-demo-token': DEMO_TOKEN
       },
-      body: JSON.stringify({ user_message: userMessage, user_id: 'demo_user_001' })
+      body: JSON.stringify({
+        user_message: userMessage,
+        user_id: 'demo_user_001',
+        conversation_id: conv  // 第一次为 null，之后保持同一会话
+      })
     });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    return await resp.json();
+    const result = await resp.json();
+    // 透传：把 Coze 返回的 conversation_id 持久化到 sessionStorage
+    if (result && result.conversation_id) {
+      setConversationId(result.conversation_id);
+    }
+    return result;
   }
 
   function parseReplyContent(result) {
@@ -504,6 +610,315 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!reply) reply = '我在呢喵，有什么能帮你的吗喵';
 
     return { reply, structured };
+  }
+
+  // ============ 本地消费回顾拦截器 ============
+  // 当用户问"花了多少 / 这周/今天 / 餐饮花了多少 / 哪笔最大 / 几顿外卖"等查询类问题时
+  // 直接读 localStorage 账本回答，不走 Coze（更快、更准、不耗 token）
+  // ============ 本地能力路由器 ============
+  // 不需要 LLM 推理的所有能力全部在本地处理
+  // 返回 { reply, card?, powerDelta? } 或 null（让 Coze 接管）
+  function tryLocalQuery(input) {
+    if (!input) return null;
+    const text = input.replace(/\s+/g, '');
+
+    // ---- 1. 问候 / 闲聊 / 自我介绍（高频开场白） ----
+    if (/^(你好|您好|hi|hello|嗨|在吗|在不在|你叫什么|你是谁|介绍.{0,2}你)/i.test(text)) {
+      return {
+        reply: greetingReply(),
+        powerDelta: 2
+      };
+    }
+
+    // ---- 2. 帮助 / 能做什么 ----
+    if (/(怎么用|能做什么|有什么功能|帮我啥|帮助|功能|说明|指南|教程)/.test(text)) {
+      return {
+        reply: '我可以帮你做四件事喵：① 一句话记账（比如说"午饭30"）② 攒钱目标（说"想买XX要XX元"）③ 理财科普（问"基金是什么"）④ 风险识别（粘贴可疑信息）。也能查回顾，比如问"我这周花了多少"喵',
+        powerDelta: 1
+      };
+    }
+
+    // ---- 3. 当前状态查询：剩多少能花 / 我攒了多少 / 喵力值多少 / 进化到哪了 ----
+    if (/(还能花|还剩|预算剩|可花|本周.{0,2}剩|今天.{0,2}剩|余额)/.test(text)) {
+      return localBudgetLeft();
+    }
+    if (/(我攒了|攒了多少|存了多少|目标进度|攒钱进度|储蓄进度)/.test(text)) {
+      return localSavingProgress();
+    }
+    if (/(喵力值|我.{0,2}多少分|多少喵力|经验值|多少级|第几级|什么阶段)/.test(text)) {
+      return localPowerStatus();
+    }
+
+    // ---- 4. 消费回顾（"花了多少 / 哪笔最大 / 几笔 / 平均"） ----
+    if (/(花了|花.{0,3}多少|消费|开销|开支|账单|记录|哪.{0,3}最|几.{0,3}笔|总共.{0,2}花|一共.{0,2}花|平均)/.test(text)
+        || /^(查|看|算|统计)/.test(text)) {
+      return localConsumptionReview(text);
+    }
+
+    // ---- 5. 重置 / 清空（敏感操作，要二次确认） ----
+    if (/^(重置|清空|清零|删除|抹掉|reset|clear)/i.test(text)) {
+      return localResetGuide(text);
+    }
+
+    // ---- 5.5 换个话题 / 重置对话上下文（清 Coze 会话） ----
+    if (/^(换个话题|换话题|重新开始|新对话|重置对话|清除上下文)/.test(text)) {
+      try { sessionStorage.removeItem(CONV_KEY); } catch (e) {}
+      return {
+        reply: '好嘞喵，咱重新开始聊～你想说点什么？',
+        powerDelta: 0
+      };
+    }
+
+    // ---- 6. 设置预算（本周可花 / 周预算 / 月预算） ----
+    const budgetMatch = text.match(/(?:本?周|每周|周)预算(?:设(?:成|为|置)?|改(?:成|为)?)?\s*(\d+)/);
+    if (budgetMatch) {
+      const v = parseInt(budgetMatch[1], 10);
+      state.weeklyBudget = v;
+      saveState();
+      syncUI();
+      return {
+        reply: `好嘞喵，本周预算改成 ${v} 元啦，剩 ${Math.max(0, v - state.weeklySpent)} 元可以花喵`,
+        powerDelta: 3
+      };
+    }
+
+    // 把 Coze 留给真正需要 LLM 的：理财科普、风险判断、攒钱目标拆解、复杂记账
+    return null;
+  }
+
+  // ---- 子函数：每次随机一句问候，避免单调 ----
+  function greetingReply() {
+    const opts = [
+      '嗨，你来啦喵～今天想聊点什么？',
+      '在的喵～最近钱花得怎么样？',
+      '嗨呀，我是小招喵，可以陪你记账、攒钱、聊理财喵',
+      '你好喵～今天有什么想问的吗？'
+    ];
+    return opts[Math.floor(Math.random() * opts.length)];
+  }
+
+  // ---- 子函数：本周/今日剩余预算 ----
+  function localBudgetLeft() {
+    const weeklyBudget = state.weeklyBudget || 0;
+    const weeklyLeft = Math.max(0, weeklyBudget - state.weeklySpent);
+    const todaySpent = state.todaySpent || 0;
+    const dailyBudget = state.dailyBudget;
+
+    const lines = [];
+    lines.push(`本周预算 ${weeklyBudget} 元，已花 ${state.weeklySpent} 元，还能花 ${weeklyLeft} 元喵`);
+    if (dailyBudget != null && dailyBudget > 0) {
+      const todayLeft = Math.max(0, dailyBudget - todaySpent);
+      lines.push(`今天预算 ${dailyBudget} 元，已花 ${todaySpent} 元，还剩 ${todayLeft} 元喵`);
+    } else if (todaySpent > 0) {
+      lines.push(`今天目前花了 ${todaySpent} 元`);
+    }
+    // 健康度提示
+    if (weeklyBudget > 0) {
+      const ratio = state.weeklySpent / weeklyBudget;
+      if (ratio >= 1) lines.push('⚠️ 本周预算已经超啦，节制一下喵');
+      else if (ratio >= 0.8) lines.push('快到周预算 80% 了，剩下几天悠着点喵');
+    }
+    return { reply: lines.join('，'), powerDelta: 1 };
+  }
+
+  // ---- 子函数：攒钱进度 ----
+  function localSavingProgress() {
+    const goals = state.savingGoals || [];
+    if (goals.length === 0) {
+      return {
+        reply: '你还没设过攒钱目标呢喵，跟我说一声"想买XX要XX元"，我帮你算每天该存多少喵',
+        powerDelta: 1
+      };
+    }
+    if (goals.length === 1) {
+      const g = goals[0];
+      const pct = g.target > 0 ? Math.min(100, Math.round((g.saved || 0) / g.target * 100)) : 0;
+      const left = Math.max(0, (g.target || 0) - (g.saved || 0));
+      return {
+        reply: `「${g.name}」攒到 ${g.saved || 0}/${g.target} 元啦喵（${pct}%），还差 ${left} 元，加油喵`,
+        powerDelta: 2
+      };
+    }
+    // 多目标
+    const lines = goals.slice(0, 3).map(g => {
+      const pct = g.target > 0 ? Math.round((g.saved || 0) / g.target * 100) : 0;
+      return `${g.name} ${g.saved || 0}/${g.target} 元 (${pct}%)`;
+    });
+    return {
+      reply: `你目前的攒钱目标喵：\n` + lines.join('\n'),
+      powerDelta: 2
+    };
+  }
+
+  // ---- 子函数：喵力值 / 阶段 ----
+  function localPowerStatus() {
+    const power = state.meowPower || 0;
+    const idx = getStageIndex(power);
+    const cur = stages[idx];
+    const next = stages[idx + 1];
+    if (!next) {
+      return {
+        reply: `喵力值 ${power}，已经是 ${cur.level} 满阶啦喵～你陪我成长得真好`,
+        powerDelta: 0
+      };
+    }
+    const need = next.threshold - power;
+    return {
+      reply: `当前喵力值 ${power}，处于 ${cur.level}，再攒 ${need} 喵力就能升到 ${next.level} 喵～继续记账、攒钱、学理财都能加分哦`,
+      powerDelta: 0
+    };
+  }
+
+  // ---- 子函数：消费回顾 ----
+  function localConsumptionReview(text) {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const weekStart = today - now.getDay() * 86400000;
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+
+    let scope = 'week', scopeLabel = '本周';
+    if (/今天|今日|当天/.test(text)) { scope = 'today'; scopeLabel = '今天'; }
+    else if (/这周|本周|这礼拜|这星期/.test(text)) { scope = 'week'; scopeLabel = '本周'; }
+    else if (/这个月|本月|这月/.test(text)) { scope = 'month'; scopeLabel = '本月'; }
+
+    const minTs = scope === 'today' ? today : scope === 'week' ? weekStart : monthStart;
+
+    const allItems = [];
+    let totalAmount = 0;
+    (state.ledger || []).forEach(entry => {
+      const ts = new Date(entry.date).getTime();
+      if (ts < minTs) return;
+      (entry.items || []).forEach(it => {
+        allItems.push({ ...it, ts });
+        totalAmount += Number(it.amount) || 0;
+      });
+    });
+
+    if (allItems.length === 0) {
+      return {
+        reply: `${scopeLabel}还没记账呢喵，要不先告诉我今天吃了点啥？比如"午饭25"喵`,
+        powerDelta: 1
+      };
+    }
+
+    const catMatch = ['餐饮','饮品','交通','学习','娱乐','购物','生活','社交','医疗']
+      .find(c => text.includes(c));
+
+    const byCat = {};
+    allItems.forEach(it => {
+      const c = it.category || '其他';
+      byCat[c] = (byCat[c] || 0) + (Number(it.amount) || 0);
+    });
+    const catRanking = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
+
+    // 平均
+    if (/平均/.test(text)) {
+      const avg = (totalAmount / allItems.length).toFixed(1);
+      return {
+        reply: `${scopeLabel}平均每笔 ${avg} 元喵，共 ${allItems.length} 笔，总计 ${totalAmount} 元`,
+        card: { scope: scopeLabel, total: totalAmount, items: allItems.slice(-6).reverse(), catRanking },
+        powerDelta: 2
+      };
+    }
+
+    // 哪笔最大
+    if (/哪.{0,3}最|最大|最贵|最多.{0,3}笔/.test(text)) {
+      const top = [...allItems].sort((a, b) => (b.amount || 0) - (a.amount || 0))[0];
+      return {
+        reply: `${scopeLabel}最大一笔是${top.name} ${top.amount}元（${top.category || '其他'}）喵，要不要看看这类开销能不能控制一下？`,
+        card: { scope: scopeLabel, total: totalAmount, items: allItems.slice(0, 8), catRanking },
+        powerDelta: 2
+      };
+    }
+
+    // 类别专项
+    if (catMatch) {
+      const catTotal = byCat[catMatch] || 0;
+      const catItems = allItems.filter(it => it.category === catMatch);
+      if (catTotal === 0) {
+        return { reply: `${scopeLabel}${catMatch}还没记录哦喵`, powerDelta: 1 };
+      }
+      return {
+        reply: `${scopeLabel}${catMatch}花了 ${catTotal} 元喵，共 ${catItems.length} 笔`,
+        card: { scope: `${scopeLabel} · ${catMatch}`, total: catTotal, items: catItems.slice(0, 8), catRanking: [] },
+        powerDelta: 2
+      };
+    }
+
+    // 通用总览
+    const topCat = catRanking[0];
+    const replyParts = [`${scopeLabel}一共花了 ${totalAmount} 元喵，共 ${allItems.length} 笔`];
+    if (topCat && catRanking.length > 1) {
+      replyParts.push(`其中${topCat[0]}最多，${topCat[1]} 元`);
+    }
+    return {
+      reply: replyParts.join('，') + '喵',
+      card: { scope: scopeLabel, total: totalAmount, items: allItems.slice(-6).reverse(), catRanking },
+      powerDelta: 2
+    };
+  }
+
+  // ---- 子函数：重置引导 ----
+  // 出于数据安全，重置只在用户明确说"确认重置"时才执行
+  function localResetGuide(text) {
+    // 二次确认指令
+    if (/(确认|确定|是的|yes).{0,4}(重置|清空)/i.test(text) || /^(重置|清空|清零).{0,4}(确认|确定)$/i.test(text)) {
+      // 仅清今日数据 vs 全部
+      if (/全部|所有|清零所有/.test(text)) {
+        state.todaySpent = 0;
+        state.weeklySpent = 0;
+        state.ledger = [];
+        state.savingGoals = [];
+        state.activeGoalId = null;
+        state.meowPower = 0;
+        saveState();
+        syncUI();
+        applyMascotStage(0, true);
+        return { reply: '都已经清空啦喵～咱重新开始记吧', powerDelta: 0 };
+      }
+      // 默认清今日
+      state.todaySpent = 0;
+      // 同时把今天的 ledger 移除
+      const today = new Date(); today.setHours(0,0,0,0);
+      state.ledger = (state.ledger || []).filter(e => new Date(e.date).getTime() < today.getTime());
+      saveState();
+      syncUI();
+      return { reply: '今天的记录已经清空啦喵', powerDelta: 0 };
+    }
+    // 询问类，给确认指引
+    if (/全部|所有/.test(text)) {
+      return {
+        reply: '会清空账本、攒钱目标、喵力值——都没了哦喵。如果确定，请回复"确认重置全部"',
+        powerDelta: 0
+      };
+    }
+    return {
+      reply: '默认只清今天的记录哦喵。回复"确认重置"清今日，或者"确认重置全部"清所有数据',
+      powerDelta: 0
+    };
+  }
+
+
+  // 渲染消费回顾卡片
+  function renderConsumptionReviewCard(data) {
+    const el = document.createElement('article');
+    el.className = 'knowledge-card';
+    const itemsHtml = (data.items || []).map(i =>
+      `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px;color:#5A5A5E"><span>${escapeHtml(i.name)}</span><span>${i.amount}元 · ${escapeHtml(i.category||'其他')}</span></div>`
+    ).join('');
+    const catHtml = (data.catRanking || []).slice(0, 4).map(([c, v]) =>
+      `<span style="display:inline-block;background:#FFF5F5;color:#D71920;padding:2px 8px;border-radius:8px;font-size:11px;margin:2px 4px 0 0">${escapeHtml(c)} ${v}元</span>`
+    ).join('');
+    el.innerHTML = `
+      <div class="card-title">消费回顾</div>
+      <div class="card-inner">
+        <h3>${escapeHtml(data.scope)}消费</h3>
+        <div style="text-align:right;font-size:18px;font-weight:700;color:#D71920;margin-bottom:6px">合计 ${data.total} 元</div>
+        ${itemsHtml}
+        ${catHtml ? `<div style="margin-top:8px">${catHtml}</div>` : ''}
+      </div>`;
+    chatArea.appendChild(el);
+    scrollToBottom();
   }
 
   // 核心：处理一次对话，驱动状态、卡片、UI 联动
@@ -583,6 +998,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // 3.2 记账：Coze 没返回 expense_card 时，从用户输入解析
+    // ⚠️ 严格条件：必须 inferIntent 也判定为 expense（已加严正则），避免攒钱目标被误判
     if (!hadExpenseCard && intent === 'expense') {
       const parsed = parseUserExpense(userInput);
       if (parsed) {
@@ -609,6 +1025,24 @@ document.addEventListener('DOMContentLoaded', () => {
     isSending = true;
     if (!message) chatInput.value = '';
     addBubble(val, 'right');
+
+    // 🔍 本地能力路由：问候、状态查询、消费回顾、预算调整、重置等不耗 Coze
+    const localAnswer = tryLocalQuery(val);
+    if (localAnswer) {
+      addLoadingBubble();
+      await new Promise(r => setTimeout(r, 500));
+      removeLoadingBubble();
+      addBubble(localAnswer.reply, 'left');
+      if (localAnswer.card) {
+        setTimeout(() => renderConsumptionReviewCard(localAnswer.card), 300);
+      }
+      // 按子能力差异化加分
+      const delta = typeof localAnswer.powerDelta === 'number' ? localAnswer.powerDelta : 1;
+      if (delta > 0) addPower(delta);
+      isSending = false;
+      return;
+    }
+
     addLoadingBubble();
 
     try {
@@ -636,6 +1070,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // ============ 事件绑定 ============
   sendBtn.addEventListener('click', () => handleSend());
   chatInput.addEventListener('keydown', e => { if (e.key === 'Enter') handleSend(); });
+  if (mascotStage) {
+    mascotStage.addEventListener('click', mascotTap);
+  }
 
   // ============ 初始化 ============
   applyMascotStage(currentStageIndex, false);

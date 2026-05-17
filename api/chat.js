@@ -109,7 +109,26 @@ async function getAccessToken() {
     return cachedAccessToken;
   }
 
-  const jwtToken = signJWT();
+  // 启动诊断日志（仅打印关键长度和前后片段，不泄露完整密钥）
+  console.log('[diag] CLIENT_ID=', JSON.stringify(CLIENT_ID), 'len=', (CLIENT_ID || '').length);
+  console.log('[diag] PUBLIC_KEY_ID=', JSON.stringify(PUBLIC_KEY_ID), 'len=', (PUBLIC_KEY_ID || '').length);
+  console.log('[diag] PRIVATE_KEY len=', (PRIVATE_KEY || '').length,
+              ' starts=', (PRIVATE_KEY || '').slice(0, 30),
+              ' ends=', (PRIVATE_KEY || '').slice(-30));
+  console.log('[diag] PRIVATE_KEY has BEGIN=', PRIVATE_KEY.includes('-----BEGIN'),
+              ' has END=', PRIVATE_KEY.includes('-----END'),
+              ' has \\n literal=', PRIVATE_KEY.includes('\\n'),
+              ' has real newline=', PRIVATE_KEY.includes('\n'));
+
+  let jwtToken;
+  try {
+    jwtToken = signJWT();
+    console.log('[diag] JWT signed OK, length=', jwtToken.length);
+  } catch (e) {
+    console.error('[diag] signJWT failed:', e.message);
+    throw new Error('signJWT failed: ' + e.message);
+  }
+
   const body = JSON.stringify({
     duration_seconds: 86399, // 24 小时（接近 Coze 上限）
     grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer'
@@ -128,8 +147,8 @@ async function getAccessToken() {
   }, body);
 
   if (!resp.access_token) {
-    console.error('JWT exchange failed:', JSON.stringify(resp));
-    throw new Error('Failed to exchange JWT for access_token');
+    console.error('[diag] JWT exchange Coze response:', JSON.stringify(resp));
+    throw new Error('Failed to exchange JWT for access_token: ' + JSON.stringify(resp).slice(0, 200));
   }
   cachedAccessToken = resp.access_token;
   cachedExpireAt = (resp.expires_in || (now / 1000 + 3600)) * 1000;
@@ -137,7 +156,8 @@ async function getAccessToken() {
 }
 
 // ============ 调 Coze v3/chat（非流式 + 轮询） ============
-async function callCoze(userMessage, userId) {
+// conversationId: 透传则延续同一会话上下文；首次为空，由 Coze 生成后透传给前端
+async function callCoze(userMessage, userId, conversationId) {
   const accessToken = await getAccessToken();
 
   // 1. 发起对话
@@ -153,10 +173,15 @@ async function callCoze(userMessage, userId) {
     }]
   });
 
+  // 关键：URL query 中带 conversation_id 维持上下文（Coze 官方约定）
+  const chatPath = conversationId
+    ? `/v3/chat?conversation_id=${encodeURIComponent(conversationId)}`
+    : '/v3/chat';
+
   const chatResp = await httpsRequest({
     hostname: 'api.coze.cn',
     port: 443,
-    path: '/v3/chat',
+    path: chatPath,
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${accessToken}`,
@@ -171,7 +196,8 @@ async function callCoze(userMessage, userId) {
   }
 
   const chatId = chatResp.data.id;
-  const conversationId = chatResp.data.conversation_id;
+  // 重要：使用 Coze 返回的 conversation_id（首次会新建，之后会复用传入的）
+  const finalConversationId = chatResp.data.conversation_id;
 
   // 2. 轮询状态（最多 40 次 × 2.5s ≈ 100s，留余量给 Vercel 默认 60s 函数超时）
   let status = 'in_progress';
@@ -182,7 +208,7 @@ async function callCoze(userMessage, userId) {
     const statusResp = await httpsRequest({
       hostname: 'api.coze.cn',
       port: 443,
-      path: `/v3/chat/retrieve?conversation_id=${conversationId}&chat_id=${chatId}`,
+      path: `/v3/chat/retrieve?conversation_id=${finalConversationId}&chat_id=${chatId}`,
       method: 'GET',
       headers: { 'Authorization': `Bearer ${accessToken}` }
     });
@@ -190,20 +216,20 @@ async function callCoze(userMessage, userId) {
   }
 
   if (status !== 'completed') {
-    return { reply: '小招喵想了好久没想出来喵，再试一次吧喵' };
+    return { reply: '小招喵想了好久没想出来喵，再试一次吧喵', conversation_id: finalConversationId };
   }
 
   // 3. 获取消息列表
   const msgResp = await httpsRequest({
     hostname: 'api.coze.cn',
     port: 443,
-    path: `/v3/chat/message/list?conversation_id=${conversationId}&chat_id=${chatId}`,
+    path: `/v3/chat/message/list?conversation_id=${finalConversationId}&chat_id=${chatId}`,
     method: 'GET',
     headers: { 'Authorization': `Bearer ${accessToken}` }
   });
 
   if (msgResp.code !== 0 || !msgResp.data) {
-    return { reply: '刚刚有点没听清喵，你可以再说一遍吗喵' };
+    return { reply: '刚刚有点没听清喵，你可以再说一遍吗喵', conversation_id: finalConversationId };
   }
 
   // 优先从 tool_response 提取工作流原始结构化结果
@@ -217,7 +243,7 @@ async function callCoze(userMessage, userId) {
         try {
           const structured = JSON.parse(inner);
           if (structured && (structured.reply || structured.cards || structured.state_update)) {
-            return structured;
+            return { ...structured, conversation_id: finalConversationId };
           }
         } catch (e) { /* 跳过 */ }
       }
@@ -227,10 +253,14 @@ async function callCoze(userMessage, userId) {
   // 回退：取 type=answer
   const answerMsg = msgResp.data.find(m => m.role === 'assistant' && m.type === 'answer');
   if (!answerMsg || !answerMsg.content) {
-    return { reply: '刚刚有点没听清喵，你可以再说一遍吗喵' };
+    return { reply: '刚刚有点没听清喵，你可以再说一遍吗喵', conversation_id: finalConversationId };
   }
-  try { return JSON.parse(answerMsg.content); }
-  catch (e) { return { reply: answerMsg.content }; }
+  try {
+    const parsed = JSON.parse(answerMsg.content);
+    return { ...parsed, conversation_id: finalConversationId };
+  } catch (e) {
+    return { reply: answerMsg.content, conversation_id: finalConversationId };
+  }
 }
 
 // ============ Vercel Handler ============
@@ -271,7 +301,7 @@ module.exports = async (req, res) => {
   }
 
   // 解析 body（Vercel 会自动 parse JSON body）
-  const { user_message, user_id } = req.body || {};
+  const { user_message, user_id, conversation_id } = req.body || {};
   if (!user_message || typeof user_message !== 'string') {
     res.status(400).json({ error: 'Missing user_message' });
     return;
@@ -284,8 +314,8 @@ module.exports = async (req, res) => {
   }
 
   try {
-    console.log(`[chat] ip=${ip} msg=${user_message.slice(0, 40)}`);
-    const result = await callCoze(user_message, user_id);
+    console.log(`[chat] ip=${ip} conv=${conversation_id || 'new'} msg=${user_message.slice(0, 40)}`);
+    const result = await callCoze(user_message, user_id, conversation_id);
     res.status(200).json(result);
   } catch (err) {
     console.error('Chat error:', err.message);
